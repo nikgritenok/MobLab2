@@ -5,21 +5,19 @@ import android.view.View
 import android.widget.ProgressBar
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.ViewModelProvider
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.example.rickandmorty.adapter.CharacterAdapter
 import com.example.rickandmorty.model.Character
-import com.example.rickandmorty.model.CharacterResponse
-import com.example.rickandmorty.network.ApiClient
-import retrofit2.Call
-import retrofit2.Callback
-import retrofit2.Response
+import com.example.rickandmorty.viewmodel.MainViewModel
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var recyclerView: RecyclerView
     private lateinit var progressBar: ProgressBar
     private lateinit var characterAdapter: CharacterAdapter
+    private lateinit var viewModel: MainViewModel
     private var characterList: MutableList<Character> = mutableListOf()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -33,28 +31,26 @@ class MainActivity : AppCompatActivity() {
         characterAdapter = CharacterAdapter(characterList)
         recyclerView.adapter = characterAdapter
 
-        loadCharacters()
+        viewModel = ViewModelProvider(this)[MainViewModel::class.java]
+        setupObservers()
+        viewModel.fetchCharacters()
     }
 
-    private fun loadCharacters() {
-        progressBar.visibility = View.VISIBLE
+    private fun setupObservers() {
+        viewModel.characters.observe(this) { characters ->
+            characterList.clear()
+            characterList.addAll(characters)
+            characterAdapter.notifyDataSetChanged()
+        }
 
-        ApiClient.api.getAllCharacters().enqueue(object : Callback<CharacterResponse> {
-            override fun onResponse(call: Call<CharacterResponse>, response: Response<CharacterResponse>) {
-                progressBar.visibility = View.GONE
-                if (response.isSuccessful && response.body() != null) {
-                    characterList.clear()
-                    characterList.addAll(response.body()!!.results)
-                    characterAdapter.notifyDataSetChanged()
-                } else {
-                    Toast.makeText(this@MainActivity, "Ошибка загрузки данных", Toast.LENGTH_SHORT).show()
-                }
-            }
+        viewModel.isLoading.observe(this) { isLoading ->
+            progressBar.visibility = if (isLoading) View.VISIBLE else View.GONE
+        }
 
-            override fun onFailure(call: Call<CharacterResponse>, t: Throwable) {
-                progressBar.visibility = View.GONE
-                Toast.makeText(this@MainActivity, "Ошибка сети: ${t.message}", Toast.LENGTH_LONG).show()
+        viewModel.error.observe(this) { error ->
+            error?.let {
+                Toast.makeText(this, "Ошибка: $it", Toast.LENGTH_LONG).show()
             }
-        })
+        }
     }
 }
